@@ -1,3 +1,4 @@
+import sys
 import customtkinter as ctk
 from frames.numeros_frame import NumerosFrame
 from frames.mensagens_frame import MensagensFrame
@@ -11,6 +12,18 @@ import csv
 
 PROFILE_DIR = "firefox_profile"
 
+### NOVO: Função para encontrar arquivos no ambiente do PyInstaller ###
+def resource_path(relative_path):
+    """ Retorna o caminho absoluto para o recurso, funcionando para dev e para PyInstaller """
+    try:
+        # PyInstaller cria uma pasta temporária e armazena o caminho em _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Se não estiver rodando como .exe, usa o caminho normal
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 class AppGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -19,9 +32,12 @@ class AppGUI(ctk.CTk):
         self.resizable(False, False)
         ctk.set_appearance_mode("dark")
 
-        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+        ### ALTERADO: Usa a função resource_path para carregar o ícone da janela ###
+        icon_path = resource_path(os.path.join("assets", "icon.ico"))
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
+        else:
+            print(f"Ícone da janela não encontrado em: {icon_path}")
 
         # --- Bot ---
         self.bot_thread = None
@@ -76,17 +92,13 @@ class AppGUI(ctk.CTk):
             return
 
         self.stop_event = threading.Event()
-
-        def handle_callback(_):
-            pass  # integração futura com janela
-
+        
         self.bot = WhatsAppBot(
             numeros=numeros,
             mensagens=mensagens,
             log_callback=self.log_message,
             status_callback=self.bot_finished,
             progress_callback=self.update_progress,
-            handle_callback=handle_callback,
             stop_event=self.stop_event,
             profile_path=PROFILE_DIR
         )
@@ -123,3 +135,4 @@ class AppGUI(ctk.CTk):
             return
         self.numeros_frame.set_numeros(faltantes)
         self.log_message(f"ℹ️ Carregados {len(faltantes)} números pendentes.")
+

@@ -3,12 +3,10 @@ import os
 import sys
 import shutil
 
-# --- Configurações ---
 APP_NAME = "DisparadorWhatsApp"
-ENTRY_POINT = "main.py"  # Atualizei para main.py (onde a GUI principal está)
+ENTRY_POINT = "main_app.py"
 ICON_PATH = os.path.join("assets", "icon.ico")
 
-# Dependências que o PyInstaller precisa coletar dados
 PACKAGES_WITH_DATA = [
     'camoufox',
     'browserforge',
@@ -17,7 +15,6 @@ PACKAGES_WITH_DATA = [
     'customtkinter'
 ]
 
-# Pastas/arquivos de build a limpar
 CLEAN_FOLDERS = ["dist", "build", f"{APP_NAME}.spec"]
 
 def clean_previous_build():
@@ -33,44 +30,44 @@ def build_exe():
     print("⚡ Iniciando build do executável .exe")
     print("="*50)
 
-    # Limpa builds anteriores
     clean_previous_build()
+
+    icon_abs_path = os.path.abspath(ICON_PATH)
+    if not os.path.exists(icon_abs_path):
+        print(f"⚠️ Ícone '{icon_abs_path}' não encontrado. Ignorando.")
+        icon_abs_path = None
 
     command = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
         "--onefile",
         "--windowed",
-        "--clean"
+        "--clean",
+        f"--name={APP_NAME}"
     ]
 
-    # Adiciona nome do app
-    command.append(f"--name={APP_NAME}")
+    if icon_abs_path:
+        command.append(f"--icon={icon_abs_path}")
 
-    # Adiciona ícone se existir
-    if os.path.exists(ICON_PATH):
-        command.append(f"--icon={ICON_PATH}")
-    else:
-        print(f"⚠️ Ícone '{ICON_PATH}' não encontrado. Ignorando.")
 
-    # Excluir módulos de teste desnecessários
+    assets_path = os.path.join(os.getcwd(), "assets")
+    if os.path.exists(assets_path):
+        command.append(f"--add-data={assets_path}{os.pathsep}assets")
+    
     command.extend([
         "--exclude-module", "tkinter.test",
         "--exclude-module", "tests"
     ])
 
-    # Coleta dados dos pacotes
     for pkg in PACKAGES_WITH_DATA:
         command.extend(["--collect-all", pkg])
 
-    # Arquivo principal
     command.append(ENTRY_POINT)
 
     print("\nComando gerado para PyInstaller:")
     print(" ".join(command))
     print("="*50 + "\n")
 
-    # Executa PyInstaller
     try:
         process = subprocess.Popen(
             command,

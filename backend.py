@@ -11,14 +11,6 @@ import platform
 import subprocess
 from browserforge.fingerprints import Screen
 
-IS_WINDOWS = platform.system() == "Windows"
-if IS_WINDOWS:
-    try:
-        import pygetwindow as gw
-    except ImportError:
-        IS_WINDOWS = False
-        print("AVISO: 'pygetwindow' não foi encontrada. A janela do navegador não será integrada.")
-
 class WhatsAppBot:
     """
     Encapsula a automação do WhatsApp usando Camoufox, com suporte para perfis persistentes.
@@ -30,7 +22,6 @@ class WhatsAppBot:
         log_callback: Callable[[str], None],
         status_callback: Callable[[bool], None],
         progress_callback: Callable[[int, int], None],
-        handle_callback: Callable[[int], None],
         stop_event: threading.Event,
         profile_path: Optional[str] = None
     ):
@@ -39,7 +30,6 @@ class WhatsAppBot:
         self.log = log_callback
         self.update_status_callback = status_callback
         self.update_progress_callback = progress_callback
-        self.update_handle_callback = handle_callback
         self.stop_event = stop_event
         self.profile_path = profile_path
 
@@ -76,19 +66,6 @@ class WhatsAppBot:
             self.log(f"✅ Mensagem enviada para {numero}!")
             self._interruptible_sleep(random.uniform(2, 4))
         except Exception as e: self.log(f"❌ Erro ao tentar enviar para {numero}: {e}")
-    
-    def _find_and_send_window_handle(self, title: str):
-        if not IS_WINDOWS: return
-        handle = None
-        for _ in range(20):
-            try:
-                if "WhatsApp" in title:
-                    win_list = gw.getWindowsWithTitle(title)
-                    if win_list: handle = win_list[0]._hWnd; break
-            except (IndexError, RuntimeError): pass
-            time.sleep(1)
-        if handle: self.log("ℹ️ Janela do navegador encontrada. Integrando na interface..."); self.update_handle_callback(handle)
-        else: self.log("⚠️ Não foi possível encontrar a janela do navegador para integrar.")
 
     def run(self):
         numeros_enviados, numeros_faltantes, total_inicial = [], list(self.numeros), len(self.numeros)
@@ -105,15 +82,10 @@ class WhatsAppBot:
                     args=['--no-proxy-server'],
                     user_data_dir="novo_perfil_whatsapp",
                     persistent_context=True,
-                    screen=Screen(max_width=600, max_height=400) 
-                ) as context:
-                    page = context.new_page()
+                    screen=Screen(max_width=600, max_height=400)
+                ) as context:   
+                    page = context.pages[0]
                     page.goto("https://web.whatsapp.com/")
-
-                    
-                    initial_title = page.title()
-                    handle_thread = threading.Thread(target=self._find_and_send_window_handle, args=(initial_title,), daemon=True)
-                    handle_thread.start()
 
                     self.log("="*50)
                     try:
@@ -139,19 +111,26 @@ class WhatsAppBot:
                     if self.stop_event.is_set(): self.log("🛑 Processo interrompido durante o login."); break
                     if not logged_in: self.log("❌ TEMPO ESGOTADO: O QR Code não foi lido a tempo."); break
                     
-                    self.log("="*50); self.log("✅ Login bem-sucedido!"); self.log("🚀 Iniciando processo de envio..."); self.log("="*50)
+                    self.log("="*50)
+                    self.log("✅ Login bem-sucedido!")
+                    self.log("🚀 Iniciando processo de envio...")
+                    self.log("="*50)
                     while numeros_faltantes and not self.stop_event.is_set():
                         numero_atual = numeros_faltantes[0]
-                        self.log("-" * 30); self.log(f"Processando {len(numeros_enviados) + 1} de {total_inicial}...")
+                        self.log("-" * 30)
+                        self.log(f"Processando {len(numeros_enviados) + 1} de {total_inicial}...")
                         mensagem = self.mensagens[len(numeros_enviados) % len(self.mensagens)]
                         self._enviar_mensagem(page, numero_atual, mensagem)
                         if self.stop_event.is_set(): break
-                        numeros_enviados.append(numero_atual); numeros_faltantes.pop(0)
+                        numeros_enviados.append(numero_atual)
+                        numeros_faltantes.pop(0)
                         self._save_progress(numeros_enviados, numeros_faltantes)
                         self.update_progress_callback(len(numeros_enviados), total_inicial)
                     
-                    if self.stop_event.is_set(): self.log("🛑 Processo interrompido pelo usuário.")
-                    else: self.log("\n🎉 Processo finalizado! Todos os contatos foram processados.")
+                    if self.stop_event.is_set():
+                        self.log("🛑 Processo interrompido pelo usuário.")
+                    else:
+                        self.log("\n🎉 Processo finalizado! Todos os contatos foram processados.")
                 break
             except Exception as e:
                 is_missing_browser_error = "Executable doesn't exist" in str(e) or "playwright install" in str(e)
@@ -160,9 +139,6 @@ class WhatsAppBot:
                     self.log("⏳ Tentando instalar automaticamente... Isso pode levar alguns minutos.")
                     try:
                         startupinfo = None
-                        if IS_WINDOWS:
-                            startupinfo = subprocess.STARTUPINFO()
-                            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                         process = subprocess.Popen(["playwright", "install", "firefox"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, startupinfo=startupinfo)
                         for line in iter(process.stdout.readline, ''): self.log(f"[Instalador] {line.strip()}")
                         process.wait()
@@ -174,5 +150,5 @@ class WhatsAppBot:
                             break
                     except Exception as install_error: self.log(f"❌ Falha crítica ao tentar instalar o Firefox: {install_error}"); break
                 else: self.log(f"❌ ERRO CRÍTICO NA AUTOMAÇÃO: {e}"); break
-        self.log("Progresso final salvo."); self.update_status_callback(False)
-
+        self.log("Progresso final salvo.")
+        self.update_status_callback(False)
