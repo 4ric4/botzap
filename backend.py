@@ -9,6 +9,7 @@ from typing import List, Callable, Optional
 import threading
 import platform
 import subprocess
+from browserforge.fingerprints import Screen
 
 IS_WINDOWS = platform.system() == "Windows"
 if IS_WINDOWS:
@@ -98,13 +99,17 @@ class WhatsAppBot:
 
         for attempt in range(2):
             try:
-                launch_args = ['-width', '800', '-height', '600']
-                with Camoufox(headless=False, humanize=True, args=launch_args, user_data_dir=self.profile_path, persistent_context=True if self.profile_path else False) as context:
-                    
-                    page = context.pages[0] if context.pages else context.new_page()
-                    
-                    if page.url == "about:blank":
-                        page.goto("https://web.whatsapp.com/")
+                with Camoufox(
+                    headless=False,
+                    humanize=True,
+                    args=['--no-proxy-server'],
+                    user_data_dir="novo_perfil_whatsapp",
+                    persistent_context=True,
+                    screen=Screen(max_width=600, max_height=400) 
+                ) as context:
+                    page = context.new_page()
+                    page.goto("https://web.whatsapp.com/")
+
                     
                     initial_title = page.title()
                     handle_thread = threading.Thread(target=self._find_and_send_window_handle, args=(initial_title,), daemon=True)
